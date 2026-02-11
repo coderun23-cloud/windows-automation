@@ -1,13 +1,12 @@
 ---
 - name: Change Windows Computer Name
   hosts: all
-  # Use 'all' for now, or the group name from NetBox like 'platform_windows'
   gather_facts: yes
 
   tasks:
     - name: Set new computer name
       ansible.windows.win_hostname:
-        hostname: "WIN10-AWX-LAB"
+        name: "WIN10-AWX-LAB"  # Use 'name' instead of 'hostname'
       register: res
 
     - name: Reboot if required
