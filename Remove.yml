@@ -6,8 +6,8 @@
   tasks:
     - name: 1. Kill Posture and Core Services
       ansible.windows.win_shell: |
-        # Stop specific Posture and UI processes to unlock files
-        $apps = "ciscod", "csc_ui", "CiscoCollabHost", "aciscoposture", "vpnagent"
+        # Stop specific Posture and UI processes
+        $apps = "ciscod", "csc_ui", "CiscoCollabHost", "aciscoposture"
         foreach ($app in $apps) {
             Get-Process -Name $app -ErrorAction SilentlyContinue | Stop-Process -Force
         }
@@ -18,28 +18,16 @@
             Stop-Service -Name $s -Force -ErrorAction SilentlyContinue
         }
 
-    - name: 2. Deep Clean Uninstall via MSI
+    - name: 2. Deep Clean Uninstall
       ansible.windows.win_shell: |
         $apps = Get-Package -Name "*Cisco Secure Client*", "*AnyConnect*" -ErrorAction SilentlyContinue
         foreach ($app in $apps) {
-            Write-Output "Uninstalling $($app.Name)..."
             msiexec.exe /x $app.FastPackageID /qn /norestart
         }
 
-    - name: 3. Scrub Registry (Removes Ghost Search Results)
+    - name: 3. Force Remove Directories via PowerShell
       ansible.windows.win_shell: |
-        $regPaths = @(
-            "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
-            "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"
-        )
-        foreach ($path in $regPaths) {
-            Get-ChildItem $path | Get-ItemProperty | Where-Object { $_.DisplayName -like "*Cisco*" } | ForEach-Object {
-                Remove-Item -Path $_.PSPath -Recurse -Force -ErrorAction SilentlyContinue
-            }
-        }
-
-    - name: 4. Force Remove Directories via PowerShell
-      ansible.windows.win_shell: |
+        # Using native PS Remove-Item is more aggressive than win_file
         $folders = "C:\Program Files (x86)\Cisco", "C:\ProgramData\Cisco"
         foreach ($f in $folders) {
             if (Test-Path $f) {
@@ -47,6 +35,6 @@
             }
         }
 
-    - name: 5. Final Reboot
+    - name: 4. Final Reboot
       ansible.windows.win_reboot:
-        msg: "Full Cisco Wipe complete. Rebooting to clear the Windows Search index."
+        msg: "Full Cisco Wipe complete. Rebooting to clear drivers."
