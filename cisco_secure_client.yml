@@ -7,31 +7,23 @@
         (Get-Package -Name "*AnyConnect*").FastPackageID
       register: legacy_id
 
-    - name: 2. Uninstall Legacy AnyConnect
-      ansible.windows.win_package:
-        product_id: "{{ legacy_id.stdout | trim }}"
-        state: absent
-      when: legacy_id.stdout != ""
-
-    - name: 3. Create Demo Installation Folder
+    - name: 2. Create Temp Folder for new client
       ansible.windows.win_file:
         path: C:\CiscoUpgrade
         state: directory
 
-    - name: 4. Copy New Version (5.1.14.145) to VM
+    - name: 3. Copy New Version (5.1.14.145) to VM
       ansible.windows.win_copy:
-        # Update this 'src' to match your local Git folder name
         src: files/cisco-secure-client-win-5.1.14.145/
         dest: C:\CiscoUpgrade\
 
-    - name: 5. Install Cisco Secure Client Core VPN
+    - name: 4. Install Cisco Secure Client Core VPN
       ansible.windows.win_package:
-        # Path updated to your latest version
         path: C:\CiscoUpgrade\cisco-secure-client-win-5.1.14.145-core-vpn-predeploy-k9.msi
         arguments: '/norestart /passive /quiet'
         state: present
 
-    - name: 6. Verify New Service
+    - name: 5. Verify New Service
       ansible.windows.win_service:
         name: vsc_agent
         state: started
