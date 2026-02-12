@@ -1,29 +1,43 @@
 ---
-- name: Migration - Uninstall AnyConnect and Install Secure Client 5.1.14
+- name: Migration - AnyConnect to Secure Client 5.1.14
   hosts: windows
-  tasks:
-    - name: 1. Identify Legacy AnyConnect Product ID
-      ansible.windows.win_shell: |
-        (Get-Package -Name "*AnyConnect*").FastPackageID
-      register: legacy_id
+  vars:
+    version: "5.1.14.145"
+    temp_path: "C:\\CiscoUpgrade"
 
-    - name: 2. Create Temp Folder for new client
+  tasks:
+    - name: 1. Find and Uninstall Legacy AnyConnect
+      ansible.windows.win_shell: |
+        $app = Get-Package -Name "*AnyConnect*" -ErrorAction SilentlyContinue
+        if ($app) {
+            msiexec.exe /x $app.FastPackageID /qn /norestart
+            return "Uninstalled"
+        }
+      register: uninstall_log
+
+    - name: 2. Create Temp Directory for new version
       ansible.windows.win_file:
-        path: C:\CiscoUpgrade
+        path: "{{ temp_path }}"
         state: directory
 
-    - name: 3. Copy New Version (5.1.14.145) to VM
+    - name: 3. Copy MSI Files from GitHub/AWX to VM
       ansible.windows.win_copy:
-        src: files/cisco-secure-client-win-5.1.14.145/
-        dest: C:\CiscoUpgrade\
+        # This matches the folder you pushed to Git
+        src: "files/cisco-secure-client-win-{{ version }}/"
+        dest: "{{ temp_path }}\\"
 
-    - name: 4. Install Cisco Secure Client Core VPN
+    - name: 4. Install Selected Modules (Core, NAM, NVM, ISE)
       ansible.windows.win_package:
-        path: C:\CiscoUpgrade\cisco-secure-client-win-5.1.14.145-core-vpn-predeploy-k9.msi
+        path: "{{ temp_path }}\\{{ item }}"
         arguments: '/norestart /passive /quiet'
         state: present
+      loop:
+        - "cisco-secure-client-win-{{ version }}-core-vpn-predeploy-k9.msi"
+        - "cisco-secure-client-win-{{ version }}-nam-predeploy-k9.msi"
+        - "cisco-secure-client-win-{{ version }}-nvm-predeploy-k9.msi"
+        - "cisco-secure-client-win-{{ version }}-iseposture-predeploy-k9.msi"
 
-    - name: 5. Verify New Service
-      ansible.windows.win_service:
-        name: vsc_agent
-        state: started
+    - name: 5. Cleanup Setup Files
+      ansible.windows.win_file:
+        path: "{{ temp_path }}"
+        state: absent
