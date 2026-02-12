@@ -12,3 +12,7 @@
         ansible.windows.win_copy:
           content: "Automation is working perfectly!"
           dest: "{{ ansible_user_dir }}\\Desktop\\AWX_Project\\note.txt"
+      - name: Add another File
+        ansible.windows.win_copy:
+          content: "Another One"
+          dest: "{{ansible_user_dir}}\\Desktop\\AWX_Project\\another.txt"
