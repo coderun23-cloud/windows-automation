@@ -1,0 +1,31 @@
+---
+ - name: Migrate from Anyconnect to Cisco Secure Client
+   hosts: all
+   gather_facts: yes
+
+
+   tasks:
+    - name: 1. Remove Legacy Cisco Anyconnect
+      ansible.windows.win_package:
+        product_id: 
+        state: absent
+
+   - name: 2. Create Temp Folder for new client
+     ansible.windows.win_file:
+        path:
+        state: directory
+   - name: 3. Copy Secure Client Files to VM
+     ansible.windows.win_copy:
+        src: files/cisco-secure-client-win-5.1.11.388/
+        dest: C:\CiscoMigration\
+
+   - name: 4. Install New Cisco Secure Client (Core VPN)
+     ansible.windows.win_package:
+        path: C:\CiscoMigration\cisco-secure-client-win-5.1.11.388-core-vpn-predeploy-k9.msi
+        arguments: '/norestart /passive /quiet'
+        state: present
+
+   - name: 5. Clean up installation files
+     ansible.windows.win_file:
+        path: C:\CiscoMigration
+        state: absent

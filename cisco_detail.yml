@@ -1,0 +1,27 @@
+---
+- name: Discover Cisco AnyConnect Details
+  hosts: windows
+  tasks:
+    - name: Get AnyConnect Package Details
+      ansible.windows.win_shell: |
+        Get-Package -Name "*AnyConnect*" | Select-Object Name, Version, FastPackageID | ConvertTo-Json
+      register: package_details
+
+    - name: Get AnyConnect Service Status
+      ansible.windows.win_service:
+        name: vpnagent
+      register: service_details
+
+    - name: Check Installation Directory
+      ansible.windows.win_stat:
+        path: 'C:\Program Files (x86)\Cisco\Cisco AnyConnect Secure Mobility Client'
+      register: folder_details
+
+    - name: Display Summary for Demo
+      ansible.builtin.debug:
+        msg: 
+          - "Software Name: {{ (package_details.stdout | from_json).Name }}"
+          - "Version: {{ (package_details.stdout | from_json).Version }}"
+          - "Product ID (GUID): {{ (package_details.stdout | from_json).FastPackageID }}"
+          - "Service Status: {{ service_details.state }}"
+          - "Folder Exists: {{ folder_details.stat.exists }}"
