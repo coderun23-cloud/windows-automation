@@ -1,0 +1,14 @@
+---
+  - name: Create Desktop Folder
+    hosts: all
+    gather_facts: yes
+
+    tasks:
+      - name: Create a folder on the desktop
+        ansible.windows.win_file:
+           path: "{{ansible_user_dir}}\\desktop\\AWX_Project"
+           state: directory
+      - name: Put a secret message inside
+      ansible.windows.win_copy:
+        content: "Automation is working perfectly!"
+        dest: "{{ ansible_user_dir }}\\Desktop\\AWX_Project\\note.txt"
