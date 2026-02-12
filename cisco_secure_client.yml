@@ -4,6 +4,8 @@
   vars:
     version: "5.1.14.145"
     temp_path: "C:\\CiscoUpgrade"
+    # The exact folder name as it appears in your GitHub repo
+    source_folder: "cisco-secure-client-win-5.1.14.145-predeploy-k9"
 
   tasks:
     - name: 1. Find and Uninstall Legacy AnyConnect
@@ -22,13 +24,18 @@
 
     - name: 3. Copy MSI Files from GitHub/AWX to VM
       ansible.windows.win_copy:
-        # This matches the folder you pushed to Git
-        src: "files/cisco-secure-client-win-{{ version }}/"
-        dest: "{{ temp_path }}\\"
+        src: "{{ source_folder }}"
+        dest: "C:\\"  # This will result in C:\cisco-secure-client-win-5.1.14.145-predeploy-k9
+      vars:
+        # Increased timeouts specifically for the 150MB transfer
+        ansible_winrm_operation_timeout_sec: 120
+        ansible_winrm_read_timeout_sec: 150
+      register: copy_result
 
     - name: 4. Install Selected Modules (Core, NAM, NVM, ISE)
       ansible.windows.win_package:
-        path: "{{ temp_path }}\\{{ item }}"
+        # Path updated to point to the folder created by the copy task
+        path: "C:\\{{ source_folder }}\\{{ item }}"
         arguments: '/norestart /passive /quiet'
         state: present
       loop:
@@ -37,7 +44,11 @@
         - "cisco-secure-client-win-{{ version }}-nvm-predeploy-k9.msi"
         - "cisco-secure-client-win-{{ version }}-iseposture-predeploy-k9.msi"
 
-    - name: 5. Cleanup Setup Files
-      ansible.windows.win_file:
-        path: "{{ temp_path }}"
-        state: absent
+    - name: 5. Verify Installation
+      ansible.windows.win_service:
+        name: vsc_agent
+      register: service_status
+
+    - name: 6. Display Final Status
+      ansible.builtin.debug:
+        msg: "Migration Successful! Service status is {{ service_status.state }}"
