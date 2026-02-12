@@ -6,11 +6,7 @@
   tasks:
     - name: Set new computer name
       ansible.windows.win_hostname:
-<<<<<<< HEAD
-        name: "WIN10-AWX-LAB"  # Use 'name' instead of 'hostname'
-=======
-        hostname: "Windows10-AWX"
->>>>>>> 498f7ca (change the hostname of the Windows 10)
+        name: "WINDOWS-10-AWX"  # Use 'name' instead of 'hostname'
       register: res
 
     - name: Reboot if required
