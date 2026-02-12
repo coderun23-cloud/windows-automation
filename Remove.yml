@@ -42,7 +42,7 @@
 
     - name: 5. Wait for 5 Minutes
       ansible.builtin.pause:
-        minutes: 5
+        minutes: 1
 
     - name: 6. Final Reboot
       ansible.windows.win_reboot:
