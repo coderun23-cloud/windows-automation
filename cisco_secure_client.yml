@@ -3,9 +3,9 @@
   hosts: windows
   vars:
     version: "5.1.14.145"
+    # Root folder in your GitHub repo
+    source_dir: "cisco-secure-client-win-5.1.14.145-predeploy-k9"
     temp_path: "C:\\CiscoUpgrade"
-    # The exact folder name as it appears in your GitHub repo
-    source_folder: "cisco-secure-client-win-5.1.14.145-predeploy-k9"
 
   tasks:
     - name: 1. Find and Uninstall Legacy AnyConnect
@@ -13,29 +13,27 @@
         $app = Get-Package -Name "*AnyConnect*" -ErrorAction SilentlyContinue
         if ($app) {
             msiexec.exe /x $app.FastPackageID /qn /norestart
-            return "Uninstalled"
         }
       register: uninstall_log
 
-    - name: 2. Create Temp Directory for new version
+    - name: 2. Create Clean Destination Folder
       ansible.windows.win_file:
         path: "{{ temp_path }}"
         state: directory
 
-    - name: 3. Copy MSI Files from GitHub/AWX to VM
+    - name: 3. Copy MSI Files (90MB Streamlined)
       ansible.windows.win_copy:
-        src: "{{ source_folder }}"
-        dest: "C:\\"  # This will result in C:\cisco-secure-client-win-5.1.14.145-predeploy-k9
+        # Adding the / at the end tells Ansible to copy the FILES inside, 
+        # not the folder itself. This avoids the .NET extraction error.
+        src: "{{ source_dir }}/"
+        dest: "{{ temp_path }}\\"
       vars:
-        # Increased timeouts specifically for the 150MB transfer
-        ansible_winrm_operation_timeout_sec: 120
-        ansible_winrm_read_timeout_sec: 150
-      register: copy_result
+        ansible_winrm_operation_timeout_sec: 150
+        ansible_winrm_read_timeout_sec: 180
 
     - name: 4. Install Selected Modules (Core, NAM, NVM, ISE)
       ansible.windows.win_package:
-        # Path updated to point to the folder created by the copy task
-        path: "C:\\{{ source_folder }}\\{{ item }}"
+        path: "{{ temp_path }}\\{{ item }}"
         arguments: '/norestart /passive /quiet'
         state: present
       loop:
@@ -44,11 +42,11 @@
         - "cisco-secure-client-win-{{ version }}-nvm-predeploy-k9.msi"
         - "cisco-secure-client-win-{{ version }}-iseposture-predeploy-k9.msi"
 
-    - name: 5. Verify Installation
+    - name: 5. Verify New Service Status
       ansible.windows.win_service:
         name: vsc_agent
       register: service_status
 
-    - name: 6. Display Final Status
+    - name: 6. Final Report
       ansible.builtin.debug:
-        msg: "Migration Successful! Service status is {{ service_status.state }}"
+        msg: "Migration successful. Cisco Secure Client service is {{ service_status.state }}."
