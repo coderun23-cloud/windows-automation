@@ -1,36 +1,40 @@
 ---
-- name: Total Cleanup - Force Remove Cisco Components
+- name: Force Wipe - Cisco Posture and Ghost Files
   hosts: windows
   gather_facts: no
 
   tasks:
-    - name: 1. Stop all Cisco Services (Unlocks files)
+    - name: 1. Kill Posture and Core Services
       ansible.windows.win_shell: |
-        $services = Get-Service -Name "vpnagent", "aciscoposture", "nvm_service", "csc_*" -ErrorAction SilentlyContinue
-        foreach ($s in $services) {
-            Stop-Service $s.Name -Force -ErrorAction SilentlyContinue
-            Write-Output "Stopped $($s.Name)"
+        # Stop specific Posture and UI processes
+        $apps = "ciscod", "csc_ui", "CiscoCollabHost", "aciscoposture"
+        foreach ($app in $apps) {
+            Get-Process -Name $app -ErrorAction SilentlyContinue | Stop-Process -Force
         }
-        # Kill any remaining Cisco processes
-        Get-Process -Name "Cisco*", "csc*" -ErrorAction SilentlyContinue | Stop-Process -Force
+        
+        # Stop services by name
+        $services = "ciscod", "aciscoposture", "vpnagent", "csc_*"
+        foreach ($s in $services) {
+            Stop-Service -Name $s -Force -ErrorAction SilentlyContinue
+        }
 
-    - name: 2. Deep Clean Uninstall via MSI
+    - name: 2. Deep Clean Uninstall
       ansible.windows.win_shell: |
         $apps = Get-Package -Name "*Cisco Secure Client*", "*AnyConnect*" -ErrorAction SilentlyContinue
         foreach ($app in $apps) {
             msiexec.exe /x $app.FastPackageID /qn /norestart
         }
 
-    - name: 3. Remove Leftover Folders (Should work now)
-      ansible.windows.win_file:
-        path: "{{ item }}"
-        state: absent
-      loop:
-        - "C:\\Program Files (x86)\\Cisco\\Cisco Secure Client"
-        - "C:\\Program Data\\Cisco"
-      register: folder_removal
-      ignore_errors: yes
+    - name: 3. Force Remove Directories via PowerShell
+      ansible.windows.win_shell: |
+        # Using native PS Remove-Item is more aggressive than win_file
+        $folders = "C:\Program Files (x86)\Cisco", "C:\ProgramData\Cisco"
+        foreach ($f in $folders) {
+            if (Test-Path $f) {
+                Remove-Item -Path $f -Recurse -Force -ErrorAction SilentlyContinue
+            }
+        }
 
-    - name: 4. Final Status
-      ansible.builtin.debug:
-        msg: "Cleanup finished. If Search still shows the icon, a reboot is required to clear the Windows Icon Cache."
+    - name: 4. Final Reboot
+      ansible.windows.win_reboot:
+        msg: "Full Cisco Wipe complete. Rebooting to clear drivers."
