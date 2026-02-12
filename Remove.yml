@@ -1,28 +1,36 @@
 ---
-- name: Total Cleanup - Remove All Cisco Secure Client Components
+- name: Total Cleanup - Force Remove Cisco Components
   hosts: windows
   gather_facts: no
 
   tasks:
-    - name: 1. Deep Clean Uninstall
+    - name: 1. Stop all Cisco Services (Unlocks files)
       ansible.windows.win_shell: |
-        # Find every package that matches Cisco Secure Client or AnyConnect
+        $services = Get-Service -Name "vpnagent", "aciscoposture", "nvm_service", "csc_*" -ErrorAction SilentlyContinue
+        foreach ($s in $services) {
+            Stop-Service $s.Name -Force -ErrorAction SilentlyContinue
+            Write-Output "Stopped $($s.Name)"
+        }
+        # Kill any remaining Cisco processes
+        Get-Process -Name "Cisco*", "csc*" -ErrorAction SilentlyContinue | Stop-Process -Force
+
+    - name: 2. Deep Clean Uninstall via MSI
+      ansible.windows.win_shell: |
         $apps = Get-Package -Name "*Cisco Secure Client*", "*AnyConnect*" -ErrorAction SilentlyContinue
-        
         foreach ($app in $apps) {
-            Write-Output "Removing: $($app.Name)"
             msiexec.exe /x $app.FastPackageID /qn /norestart
         }
-      register: cleanup_result
 
-    - name: 2. Remove Leftover Folders
+    - name: 3. Remove Leftover Folders (Should work now)
       ansible.windows.win_file:
         path: "{{ item }}"
         state: absent
       loop:
         - "C:\\Program Files (x86)\\Cisco\\Cisco Secure Client"
-        - "C:\\ProgramData\\Cisco\\Cisco Secure Client"
+        - "C:\\Program Data\\Cisco"
+      register: folder_removal
+      ignore_errors: yes
 
-    - name: 3. Final Search Result
+    - name: 4. Final Status
       ansible.builtin.debug:
-        msg: "{{ cleanup_result.stdout_lines if cleanup_result.stdout_lines else 'No Cisco components found.' }}"
+        msg: "Cleanup finished. If Search still shows the icon, a reboot is required to clear the Windows Icon Cache."
