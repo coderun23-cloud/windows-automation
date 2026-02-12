@@ -6,12 +6,10 @@
   tasks:
     - name: 1. Kill Posture and Core Services
       ansible.windows.win_shell: |
-        # Stop specific processes to unlock files
         $apps = "ciscod", "csc_ui", "CiscoCollabHost", "aciscoposture", "vpnagent"
         foreach ($app in $apps) {
             Get-Process -Name $app -ErrorAction SilentlyContinue | Stop-Process -Force
         }
-        # Stop background services
         $services = "ciscod", "aciscoposture", "vpnagent", "csc_*"
         foreach ($s in $services) {
             Stop-Service -Name $s -Force -ErrorAction SilentlyContinue
@@ -35,10 +33,12 @@
         $folders = "C:\Program Files (x86)\Cisco", "C:\ProgramData\Cisco"
         foreach ($f in $folders) { if (Test-Path $f) { Remove-Item -Path $f -Recurse -Force -ErrorAction SilentlyContinue } }
 
-    - name: 4. Send 5-Minute Warning to User
-      ansible.windows.win_msg:
-        display_duration_seconds: 30
-        msg: "Cisco Migration: Your computer will restart in 5 minutes to complete the cleanup. Please save your work."
+    - name: 4. Send 5-Minute Warning to User (Native PowerShell)
+      ansible.windows.win_shell: |
+        $msg = "Cisco Migration: Your computer will restart in 5 minutes to complete the cleanup. Please save your work."
+        $wshell = New-Object -ComObject WScript.Shell
+        $wshell.Popup($msg, 10, "System Maintenance", 64)
+      # 10 is the timeout for the popup itself; 64 is the Information Icon
 
     - name: 5. Wait for 5 Minutes
       ansible.builtin.pause:
