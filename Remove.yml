@@ -35,7 +35,7 @@
             }
         }
 
-    - name: 3. Force Remove Folders via PowerShell
+    - name: 3. Force Remove Folders
       ansible.windows.win_shell: |
         $folders = "C:\Program Files (x86)\Cisco", "C:\ProgramData\Cisco"
         foreach ($f in $folders) {
@@ -44,10 +44,6 @@
             }
         }
 
-    - name: 4. Send 1-Minute Warning
-      ansible.windows.win_shell: |
-        msg.exe * /TIME:30 "Cisco traces removed. Rebooting in 60 seconds to clear drivers."
-
-    - name: 5. Final Reboot (Mandatory to clear locks)
+    - name: 4. Final Reboot
       ansible.windows.win_reboot:
-        msg: "Full Cisco Wipe complete. System is now clean for a fresh install."
+        msg: "Full Cisco Wipe complete. System is now clean."
