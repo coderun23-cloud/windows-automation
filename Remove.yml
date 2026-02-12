@@ -1,47 +1,53 @@
 ---
-- name: Force Wipe - Cisco Posture and Ghost Files with Visible Warning
+- name: Force Wipe - Fix Cisco Installer Wizard & Folder Locks
   hosts: windows
   gather_facts: no
 
   tasks:
-    - name: 1. Kill Posture and Core Services
+    - name: 1. Kill Posture Services and Processes
       ansible.windows.win_shell: |
-        $apps = "ciscod", "csc_ui", "CiscoCollabHost", "aciscoposture", "vpnagent"
+        # Stop specific processes to unlock ciscod.exe
+        $apps = "ciscod", "csc_ui", "aciscoposture", "vpnagent"
         foreach ($app in $apps) {
             Get-Process -Name $app -ErrorAction SilentlyContinue | Stop-Process -Force
         }
+        # Disable and Stop services so they don't restart during deletion
         $services = "ciscod", "aciscoposture", "vpnagent", "csc_*"
         foreach ($s in $services) {
+            Set-Service -Name $s -StartupType Disabled -ErrorAction SilentlyContinue
             Stop-Service -Name $s -Force -ErrorAction SilentlyContinue
         }
 
-    - name: 2. Deep Clean Uninstall via MSI
+    - name: 2. Scrub Registry (This removes the "Repair/Modify" Wizard)
       ansible.windows.win_shell: |
-        $apps = Get-Package -Name "*Cisco Secure Client*", "*AnyConnect*" -ErrorAction SilentlyContinue
-        foreach ($app in $apps) {
-            msiexec.exe /x $app.FastPackageID /qn /norestart
-        }
-
-    - name: 3. Scrub Registry and Remove Directories
-      ansible.windows.win_shell: |
-        $regPaths = @("HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall", "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall")
+        $regPaths = @(
+            "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
+            "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall",
+            "HKLM:\SOFTWARE\Cisco"
+        )
         foreach ($path in $regPaths) {
-            Get-ChildItem $path -ErrorAction SilentlyContinue | Get-ItemProperty | Where-Object { $_.DisplayName -like "*Cisco*" } | Remove-Item -Path $_.PSPath -Recurse -Force -ErrorAction SilentlyContinue
+            if (Test-Path $path) {
+                Get-ChildItem $path -ErrorAction SilentlyContinue | Get-ItemProperty | Where-Object { 
+                    $_.DisplayName -like "*Cisco*" -or $_.Publisher -like "*Cisco*" 
+                } | ForEach-Object {
+                    Remove-Item -Path $_.PSPath -Recurse -Force -ErrorAction SilentlyContinue
+                }
+            }
         }
-        $folders = "C:\Program Files (x86)\Cisco", "C:\ProgramData\Cisco"
-        foreach ($f in $folders) { if (Test-Path $f) { Remove-Item -Path $f -Recurse -Force -ErrorAction SilentlyContinue } }
 
-    - name: 4. Send Visible Warning to User
+    - name: 3. Force Remove Folders via PowerShell
       ansible.windows.win_shell: |
-        $msg = "Cisco Migration: Your computer will restart in 1 minute to complete the cleanup. Please save your work."
-        # msg.exe * targets all active user sessions so they see the popup on their desktop
-        msg.exe * /TIME:30 $msg
-      # This is the most reliable way to jump from background to the user's desktop
+        $folders = "C:\Program Files (x86)\Cisco", "C:\ProgramData\Cisco"
+        foreach ($f in $folders) {
+            if (Test-Path $f) {
+                Remove-Item -Path $f -Recurse -Force -ErrorAction SilentlyContinue
+            }
+        }
 
-    - name: 5. Wait for 1 Minute
-      ansible.builtin.pause:
-        minutes: 1
+    - name: 4. Send 1-Minute Warning
+      ansible.windows.win_shell: |
+        msg.exe * /TIME:30 "Cisco traces removed. Rebooting in 60 seconds to clear drivers."
 
-    - name: 6. Final Reboot
+    - name: 5. Final Reboot (Mandatory to clear locks)
       ansible.windows.win_reboot:
-        msg: "Cisco Wipe complete. Rebooting now."
+        msg: "Full Cisco Wipe complete. System is now clean for a fresh install."
