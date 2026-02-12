@@ -1,0 +1,21 @@
+---
+- name: Step 1 - Remove Legacy Cisco AnyConnect Only
+  hosts: windows
+  gather_facts: yes
+
+  tasks:
+    - name: Search for AnyConnect and Uninstall
+      ansible.windows.win_shell: |
+        $app = Get-Package -Name "*AnyConnect*" -ErrorAction SilentlyContinue
+        if ($app) {
+            Write-Output "Found $($app.Name). Uninstalling..."
+            # Using the FastPackageID to trigger a silent uninstall
+            msiexec.exe /x $app.FastPackageID /qn /norestart
+        } else {
+            Write-Output "AnyConnect not found. Nothing to do."
+        }
+      register: uninstall_result
+
+    - name: Show Uninstallation Output
+      ansible.builtin.debug:
+        var: uninstall_result.stdout_lines
