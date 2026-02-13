@@ -1,44 +1,52 @@
 ---
-- name: Deploy Cisco Secure Client - Force Download & Install
+- name: Migration - AnyConnect to Secure Client 5.1.14
   hosts: windows
-  gather_facts: no
   vars:
-    # Double check this filename exists in your GitHub repo!
-    zip_url: "https://github.com/coderun23-cloud/windows-automation/raw/main/cisco_install.zip"
-    temp_dir: "C:\\CiscoUpdate"
     version: "5.1.14.145"
+    # Root folder in your GitHub repo
+    source_dir: "cisco-secure-client-win-5.1.14.145-predeploy-k9"
+    temp_path: "C:\\CiscoUpgrade"
 
   tasks:
-    - name: 1. Prepare Environment
+    - name: 1. Find and Uninstall Legacy AnyConnect
       ansible.windows.win_shell: |
-        if (Test-Path "{{ temp_dir }}") { Remove-Item "{{ temp_dir }}" -Recurse -Force }
-        New-Item -Path "{{ temp_dir }}" -ItemType Directory
+        $app = Get-Package -Name "*AnyConnect*" -ErrorAction SilentlyContinue
+        if ($app) {
+            msiexec.exe /x $app.FastPackageID /qn /norestart
+        }
+      register: uninstall_log
 
-    - name: 2. Download ZIP (With Browser User-Agent)
-      ansible.windows.win_shell: |
-        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-        $url = "https://github.com/coderun23-cloud/windows-automation/raw/main/cisco_install.zip"
-        $dest = "C:\CiscoUpdate\cisco.zip"
-        
-        # Adding a User-Agent makes GitHub think a browser is requesting the file
-        Invoke-WebRequest -Uri $url -OutFile $dest -UserAgent "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" -TimeoutSec 600
+    - name: 2. Create Clean Destination Folder
+      ansible.windows.win_file:
+        path: "{{ temp_path }}"
+        state: directory
 
-    - name: 3. Extract Files
-      ansible.windows.win_shell: |
-        Expand-Archive -Path "{{ temp_dir }}\\cisco.zip" -DestinationPath "{{ temp_dir }}" -Force
+    - name: 3. Copy MSI Files (90MB Streamlined)
+      ansible.windows.win_copy:
+        # Adding the / at the end tells Ansible to copy the FILES inside, 
+        # not the folder itself. This avoids the .NET extraction error.
+        src: "{{ source_dir }}/"
+        dest: "{{ temp_path }}\\"
+      vars:
+        ansible_winrm_operation_timeout_sec: 150
+        ansible_winrm_read_timeout_sec: 180
 
-    - name: 4. Install All Modules
+    - name: 4. Install Selected Modules (Core, NAM, NVM, ISE)
       ansible.windows.win_package:
-        path: "{{ temp_dir }}\\{{ item }}"
-        arguments: "/norestart /passive /quiet"
+        path: "{{ temp_path }}\\{{ item }}"
+        arguments: '/norestart /passive /quiet'
         state: present
       loop:
         - "cisco-secure-client-win-{{ version }}-core-vpn-predeploy-k9.msi"
-        - "cisco-secure-client-win-{{ version }}-iseposture-predeploy-k9.msi"
-        - "cisco-secure-client-win-{{ version }}-nvm-predeploy-k9.msi"
         - "cisco-secure-client-win-{{ version }}-nam-predeploy-k9.msi"
+        - "cisco-secure-client-win-{{ version }}-nvm-predeploy-k9.msi"
+        - "cisco-secure-client-win-{{ version }}-iseposture-predeploy-k9.msi"
 
-    - name: 5. Cleanup
-      ansible.windows.win_file:
-        path: "{{ temp_dir }}\\cisco.zip"
-        state: absent
+    - name: 5. Verify New Service Status
+      ansible.windows.win_service:
+        name: vsc_agent
+      register: service_status
+
+    - name: 6. Final Report
+      ansible.builtin.debug:
+        msg: "Migration successful. Cisco Secure Client service is {{ service_status.state }}."
