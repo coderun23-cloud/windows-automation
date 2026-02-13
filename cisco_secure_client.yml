@@ -14,10 +14,14 @@
         if (Test-Path "{{ temp_dir }}") { Remove-Item "{{ temp_dir }}" -Recurse -Force }
         New-Item -Path "{{ temp_dir }}" -ItemType Directory
 
-    - name: 2. Download ZIP (PowerShell Force TLS 1.2)
+    - name: 2. Download ZIP (With Browser User-Agent)
       ansible.windows.win_shell: |
         [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-        Invoke-WebRequest -Uri "{{ zip_url }}" -OutFile "{{ temp_dir }}\\cisco.zip" -TimeoutSec 600
+        $url = "https://github.com/coderun23-cloud/windows-automation/raw/main/cisco_install.zip"
+        $dest = "C:\CiscoUpdate\cisco.zip"
+        
+        # Adding a User-Agent makes GitHub think a browser is requesting the file
+        Invoke-WebRequest -Uri $url -OutFile $dest -UserAgent "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" -TimeoutSec 600
 
     - name: 3. Extract Files
       ansible.windows.win_shell: |
